@@ -1,4 +1,5 @@
 from gpiozero import Button
+from gpiozero import LED
 from time import sleep
 from datetime import datetime
 
@@ -19,18 +20,19 @@ print ("Hello Maker Faire UK - Sqeeze button and Cap Touch")
 #squeez button type
 squeeze_button = Button(4)
 
-#emergency button. Enable all buttons to trigger the capturing process
-emergency_button = Button(5)
+#enable  button. Enable all buttons to trigger the capturing process
+enable_button = Button(5)
+enable_button.hold_time = 1.5
 
-#toggle_status: 1press-->enable; 2press-->disable; hold-->trigger the capturing process when enabled
-toggle_status = False
+#enable_status: 1press-->enable; 2press-->disable; hold-->trigger the capturing process when enabled
+enable_status = False
 
 #emergency status led: on-->activated; off-->deactivated
 status_led = LED(18)
 status_led.off()
 
 #emergency_status: emergency status is enabled with the emergency
-#emergency_status is enable (True) when toggle status is True
+#emergency_status is enable (True) when enable_status is True
 emergency_status = False
 
 #countdown led
@@ -50,6 +52,27 @@ print('Press Ctrl-C to quit.')
 cap.set_thresholds(8,4)
 last_touched = cap.touched()
 
+def check_enable():
+    global enable_status
+    global emergency_status
+    
+    if not enable_status and not emergency_status:
+        print("system is enabled")
+        status_led.on()
+        enable_status = True
+    else:
+        print("system is disabled")
+        status_led.off()
+        enable_status = False
+        emergency_status = False
+
+def disable_process():
+    global enable_status
+    print("guest book process is finished, welcome new vistor")
+    enable_status = False
+    status_led.off()
+    countdown_led.off()
+
 def squeeze_being_squeezed():
     print("I am squeezed!!")
     sleep(0.5)
@@ -57,13 +80,37 @@ def squeeze_being_squeezed():
 def squeeze_take_photo():
     print("I am squeezed and will a take photo")
     take_photo()
+    disable_process()
+    sleep(0.5)
+
+def cap_being_touched():
+    print("I am being touched!!")
     sleep(0.5)
 
 def cap_take_photo():
-    print("I am being touched!!! and will take a photo")
+    print("I am being touched and will take a photo")
+    take_photo()
+    disable_process()
     sleep(0.5)
 
+def emergency():
+    global enable_status
+    global emergency_status
+    if enable_status and not emergency_status:
+        print("fire---take a photo")
+        emergency_status = True
+        disable_process()
+
+def countdown_timer():
+    for i in range(3):
+        countdown_led.off()
+        sleep(0.25)
+        countdown_led.on()
+        sleep(0.25)
+    sleep(1)
+
 def take_photo():
+    countdown_timer()
     filename_1 = str(datetime.now().strftime('%d%m%Y'))
     filename_2 = str(datetime.now().strftime('%H%M%S'))
     filename = filename_1+"_"+filename_2+"_"+LOCATION
@@ -73,7 +120,10 @@ def take_photo():
     print("Captured: "+filename)
 
 while True:
-    squeeze_button.when_pressed = squeeze_take_photo
+    enable_button.when_released = check_enable
+    
+    if enable_button.is_held:
+        emergency()
     
     #cap_touch check touch
     current_touched = cap.touched()
@@ -87,8 +137,10 @@ while True:
         if current_touched & pin_bit and not last_touched & pin_bit:
             print('{0} touched!'.format(i))
             #check is Pin 8 is touched
-            if current_touched & CAPPIN:
+            if current_touched & CAPPIN and enable_status:
                 cap_take_photo()
+            elif current_touched & CAPPIN:
+                cap_being_touched()
             
             #print('{0} touched!'.format(i))
         # Next check if transitioned from touched to not touched.
@@ -96,4 +148,11 @@ while True:
             #print('{0} released!'.format(i))
     # Update last state and wait a short period before repeating.
     last_touched = current_touched
+    
+    if enable_status:
+        #squeeze_button check squeeze
+        squeeze_button.when_pressed = squeeze_take_photo
+    else:
+        squeeze_button.when_pressed = squeeze_being_squeezed
+    
     sleep(0.5)
