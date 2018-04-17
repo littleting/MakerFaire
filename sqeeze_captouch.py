@@ -9,11 +9,15 @@ import RPi.GPIO as GPIO
 import sys
 import time
 import Adafruit_MPR121.MPR121 as MPR121
+from pygame import mixer 
 
 #captouch pin number
 CAPPIN = 256
 #location
 LOCATION = "uk"
+
+#music file
+MUSIC = "person_cheering.wav"
 
 print ("Hello Maker Faire UK - Sqeeze button and Cap Touch")
 
@@ -38,6 +42,10 @@ emergency_status = False
 #countdown led
 countdown_led = LED(17)
 countdown_led.off()
+
+#music
+mixer.init()
+mixer.music.load(MUSIC)
 
 # Create MPR121 instance.
 cap = MPR121.MPR121()
@@ -79,9 +87,8 @@ def squeeze_being_squeezed():
 
 def squeeze_take_photo():
     print("I am squeezed and will a take photo")
-    take_photo()
-    disable_process()
-    sleep(0.5)
+    main_process()
+    
 
 def cap_being_touched():
     print("I am being touched!!")
@@ -89,9 +96,7 @@ def cap_being_touched():
 
 def cap_take_photo():
     print("I am being touched and will take a photo")
-    take_photo()
-    disable_process()
-    sleep(0.5)
+    main_process()
 
 def emergency():
     global enable_status
@@ -99,7 +104,7 @@ def emergency():
     if enable_status and not emergency_status:
         print("fire---take a photo")
         emergency_status = True
-        disable_process()
+        main_process()
 
 def countdown_timer():
     for i in range(3):
@@ -118,6 +123,17 @@ def take_photo():
     photo_process = subprocess.Popen("fswebcam -r 1280x960 "+filename+".jpg", shell=True)
     photo_process.wait()
     print("Captured: "+filename)
+
+def play_sound():
+    mixer.music.play()
+    while mixer.music.get_busy() == True:
+        continue
+
+def main_process():
+    take_photo()
+    play_sound()
+    disable_process()
+    sleep(0.5)
 
 while True:
     enable_button.when_released = check_enable
