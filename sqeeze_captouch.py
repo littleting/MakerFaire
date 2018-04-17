@@ -10,14 +10,32 @@ import time
 import Adafruit_MPR121.MPR121 as MPR121
 
 #captouch pin number
-cappin = 256
+CAPPIN = 256
 #location
-makerfaire_location = "uk"
+LOCATION = "uk"
 
 print ("Hello Maker Faire UK - Sqeeze button and Cap Touch")
 
 #squeez button type
 squeeze_button = Button(4)
+
+#emergency button. Enable all buttons to trigger the capturing process
+emergency_button = Button(5)
+
+#toggle_status: 1press-->enable; 2press-->disable; hold-->trigger the capturing process when enabled
+toggle_status = False
+
+#emergency status led: on-->activated; off-->deactivated
+status_led = LED(18)
+status_led.off()
+
+#emergency_status: emergency status is enabled with the emergency
+#emergency_status is enable (True) when toggle status is True
+emergency_status = False
+
+#countdown led
+countdown_led = LED(17)
+countdown_led.off()
 
 # Create MPR121 instance.
 cap = MPR121.MPR121()
@@ -32,20 +50,23 @@ print('Press Ctrl-C to quit.')
 cap.set_thresholds(8,4)
 last_touched = cap.touched()
 
+def squeeze_being_squeezed():
+    print("I am squeezed!!")
+    sleep(0.5)
 
 def squeeze_take_photo():
-    print("I am squeezed!!")
+    print("I am squeezed and will a take photo")
     take_photo()
     sleep(0.5)
 
 def cap_take_photo():
-    print("I am being touched!!!")
+    print("I am being touched!!! and will take a photo")
     sleep(0.5)
 
 def take_photo():
     filename_1 = str(datetime.now().strftime('%d%m%Y'))
     filename_2 = str(datetime.now().strftime('%H%M%S'))
-    filename = filename_1+"_"+filename_2+"_"+makerfaire_location
+    filename = filename_1+"_"+filename_2+"_"+LOCATION
     #photo_process = subprocess.call("fswebcam "+filename+".jpg", shell=True)
     photo_process = subprocess.Popen("fswebcam -r 1280x960 "+filename+".jpg", shell=True)
     photo_process.wait()
@@ -66,7 +87,7 @@ while True:
         if current_touched & pin_bit and not last_touched & pin_bit:
             print('{0} touched!'.format(i))
             #check is Pin 8 is touched
-            if current_touched & cappin:
+            if current_touched & CAPPIN:
                 cap_take_photo()
             
             #print('{0} touched!'.format(i))
