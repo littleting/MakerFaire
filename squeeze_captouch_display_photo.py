@@ -11,6 +11,10 @@ import time
 import Adafruit_MPR121.MPR121 as MPR121
 from pygame import mixer
 import pygame
+import requests
+
+#website URL
+URL = 'http://makeusefulstuff.herokuapp.com/upload'
 
 #Pipsta
 PIPSTAPRINT_TEXT = "python BasicPrint.py"
@@ -28,14 +32,14 @@ MUSIC = "person_cheering.wav"
 WELCOME_IMAGE = 'PicturesPi/welcome.jpg'
 PHOTO_TAKEN_IMAGE = 'PicturesPi/photoistaken.jpg'
 COUNT_DOWN_IMAGES = ['PicturesPi/timer-3-01.jpg', 'PicturesPi/timer-2-01.jpg', 'PicturesPi/timer-1-01.jpg']
-COUNT_DOWN_1_IMAGE = 'PicturesPi/timer-1-01.jpg'
-COUNT_DOWN_2_IMAGE = 'PicturesPi/timer-2-01.jpg'
-COUNT_DOWN_3_IMAGE = 'PicturesPi/timer-3-01.jpg'
 CAPTURING_IMAGE = 'PicturesPi/capturing.jpg'
 THANK_YOU_IMAGE = 'PicturesPi/thankyou.jpg'
+TRY_AGAIN = "PicturesPi/somethingwrong.jpg"
 
 DISPLAY_STATUS = ['welcome', 'timer1', 'timer2', 'timer3', 'taken', 'thankyou']
 WHITE = (255,255,255)
+
+
 
 #functions defined
 def display_image(img):
@@ -60,8 +64,10 @@ def check_enable():
 
 def disable_process():
     global enable_status
+    global sending_success
     print("guest book process is finished, welcome new vistor")
     enable_status = False
+    sending_success = False
     status_led.off()
     countdown_led.off()
     display_image(WELCOME_IMAGE)
@@ -113,32 +119,84 @@ def take_photo():
     #photo_process = subprocess.call("fswebcam "+filename+".jpg", shell=True)
     photo_process = subprocess.Popen("fswebcam -r 1280x960 "+filename+".jpg", shell=True)
     photo_process.wait()
+    print("process2: "+str(photo_process.returncode))
     print("Captured: "+filename)
+    return {'process': photo_process.returncode, 'filename':filename}
 
 def play_sound():
     mixer.music.play()
     while mixer.music.get_busy() == True:
         continue
 
-def print_receipt():
+def print_receipt(makername, qrpath):
     display_image(PHOTO_TAKEN_IMAGE)
     
-    print_text_command = PIPSTAPRINT_TEXT +" "+"Helloworld Hello Maker Faire UK 2018"
-    print_qr_command = PIPSTAPRINT_QR +" "+"www.google.com"
+    print_text_command = PIPSTAPRINT_TEXT +" "+makername
+    print_qr_command = PIPSTAPRINT_QR +" "+qrpath
     print_text = subprocess.Popen(print_text_command, shell=True)
     print_text.wait()
     print_qr=  subprocess.Popen(print_qr_command, shell=True)
     print_qr.wait()
-
-def main_process():
-    take_photo()
-    play_sound()
-    print_receipt()
-    disable_process()
+    
+    sleep(1.0)
+    display_image(THANK_YOU_IMAGE)
     sleep(1.5)
 
-#code starts here
-print ("Hello Maker Faire UK - Sqeeze button and Cap Touch")
+def send_file(filename):
+    try:
+        files = {'photo': open(filename, 'rb')}
+        r = requests.post(URL, files=files)
+        print(r.json())
+        data = r.json()
+        if data['success']:
+            makername = data['name']
+            qrpath = data['path']
+            print(" name: "+makername+" path: "+qrpath)
+            
+            return {'success': True, 'makername': makername, 'path':qrpath}
+        else:
+            print("sending error, try again")
+            return {'success': False, 'makername': None, 'path': None}
+            
+    #except FileNotFoundError:
+    except IOError:
+        print("File not found, try again")
+        return {'success': False, 'makername': None, 'path': None}
+    except:
+        print("unexpected error, try again")
+        return {'success': False, 'makername': None, 'path': None}
+
+def somethingwrong():
+    display_image(TRY_AGAIN)
+    sleep(1.5)
+
+def main_process():
+    photoprocess = take_photo()
+    if photoprocess['process'] == 0:
+        global sending_success
+        count_send_attemp = 0
+        while not sending_success and count_send_attemp <= 3:
+            filename = photoprocess['filename']+".jpg"
+            sendingprocess = send_file(filename)
+            sending_success = sendingprocess['success']
+            count_send_attemp += 1
+        
+        if sending_success:
+            play_sound()
+            print_receipt(sendingprocess['makername'], sendingprocess['path'])
+        else:
+            #try again
+            print("try again")
+            somethingwrong()
+        disable_process()
+    else:
+        #try again
+        somethingwrong()
+        print("try again")
+        disable_process()
+    sleep(1.5)
+
+
 
 #squeez button type
 squeeze_button = Button(4)
@@ -165,6 +223,14 @@ countdown_led.off()
 #music
 mixer.init()
 mixer.music.load(MUSIC)
+
+#image variables
+capturing_image = ""
+#sending_success is true when Success response from website is true. 
+sending_success = False 
+
+#code starts here
+print ("Hello Maker Faire UK - Sqeeze button and Cap Touch")
 
 # Create MPR121 instance.
 cap = MPR121.MPR121()
